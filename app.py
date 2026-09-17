@@ -4,7 +4,7 @@ import streamlit as st
 from groq import Groq
 
 load_dotenv()
-API_KEY = os.getenv("GROQ_API_KEY")
+API_KEY = st.secrets.get("GROQ_API_KEY")
 MODEL = "openai/gpt-oss-120b"
 
 client = Groq(api_key=API_KEY)

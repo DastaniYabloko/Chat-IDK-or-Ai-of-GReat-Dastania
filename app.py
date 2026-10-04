@@ -1,20 +1,23 @@
 import os
 from dotenv import load_dotenv
 import streamlit as st
-from groq import Groq
+from google import genai
+from google.genai import types
 
 load_dotenv()
-API_KEY = st.secrets.get("GROQ_API_KEY")
-MODEL = "openai/gpt-oss-120b"
+API_KEY = st.secrets["GEMINI_API_KEY"]
+MODEL = "gemini-3.5-flash"
 
-client = Groq(api_key=API_KEY)
+client = genai.Client(api_key=API_KEY)
+
+SYSTEM_PROMPT = "Ты ИИ Великой Дастании. Отвечай на русском, если пользователь не просит иначе."
 
 st.set_page_config(
     page_title="Chat IDK",
     page_icon="A"
 )
 
-st.title("Тестовый чат") 
+st.title("Тестовый чат")
 
 if "messages" not in st.session_state:
     st.session_state.messages = [
@@ -22,46 +25,57 @@ if "messages" not in st.session_state:
             "role": "assistant",
             "content": "Здравствуй пользователь Я ИИ Великой Дастании! Чем могу помочь?"
         }
-        ]
+    ]
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+
+def to_gemini(history):
+    # Gemini называет роль ассистента "model", а история должна начинаться с сообщения пользователя,
+    # поэтому приветствие (первое сообщение) в запрос не отправляем
+    return [
+        types.Content(
+            role="model" if m["role"] == "assistant" else "user",
+            parts=[types.Part(text=m["content"])],
+        )
+        for m in history[1:]
+    ]
+
+
 user_input = st.chat_input("Напиши что то . . . ")
 
 if user_input:
     st.session_state.messages.append(
-      {
-        "role": "user",
-        "content": user_input
-      }
+        {
+            "role": "user",
+            "content": user_input
+        }
     )
     with st.chat_message("user"):
         st.markdown(user_input)
-    
+
     with st.chat_message("assistant"):
-        request = client.chat.completions.create(
+        response = client.models.generate_content(
             model=MODEL,
-            messages=st.session_state.messages,
-            temperature=0.6,
-            max_completion_tokens=4096,
-            top_p=1,
-            reasoning_effort="medium",
-            stream=False,
-            stop=None,
-            tools=[{"type":"browser_search"}]
+            contents=to_gemini(st.session_state.messages),
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=0.6,
+                top_p=1,
+                max_output_tokens=4096,
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+            ),
         )
-        
-        assistant_ans = request.choices[0].message.content
-        
+
+        assistant_ans = response.text or "Не удалось получить ответ, попробуй переформулировать."
+
         st.markdown(assistant_ans)
-        
+
     st.session_state.messages.append(
         {
             "role": "assistant",
             "content": assistant_ans
         }
     )
-        
-    
